@@ -1,0 +1,84 @@
+version: '3.5'
+
+services:
+  api1: &api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: api1
+    depends_on:
+      - db
+      - cache
+    expose:
+      - "8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/app
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=123456
+      - SPRING_DATA_REDIS_HOST=cache
+    networks:
+      - rinha
+    deploy:
+      resources:
+        limits:
+          cpus: '0.45'
+          memory: '0.7GB'
+
+  api2:
+    <<: *api
+    hostname: api2
+
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api1
+      - api2
+    ports:
+      - "9999:9999"
+    networks:
+      - rinha
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: '0.2GB'
+
+  db:
+    image: postgres:latest
+    command: 'postgres -c synchronous_commit=off -c shared_buffers=640MB -c max_connections=330 -c effective_cache_size=1GB -c maintenance_work_mem=384MB'
+    hostname: db
+    environment:
+      - POSTGRES_DB=app
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=123456
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - rinha
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: '1.2GB'
+
+  cache:
+    hostname: cache
+    image: redis/redis-stack-server:latest
+    command: redis-server --save "" --appendonly no --protected-mode no
+    ports:
+      - '6379:6379'
+    networks:
+      - rinha
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: '0.2GB'
+
+networks:
+  rinha:
+    driver: bridge
